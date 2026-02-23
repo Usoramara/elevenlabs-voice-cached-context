@@ -19,17 +19,38 @@ export const ELEVENLABS_AGENT_CONFIG = {
 // ── Custom LLM Proxy Config ──
 
 export const LLM_PROXY_CONFIG = {
-  // Claude model used as the brain
   model: 'claude-sonnet-4-20250514',
-  // Max tokens for voice responses (shorter = faster TTS)
-  maxTokens: 200,
-  // Temperature for conversational warmth
+  // Tool-calling rounds need room for preamble + tool blocks
+  maxTokens: 1024,
+  // Final spoken response — keep short for voice (400 tokens ~ 30-45s speech)
+  finalRoundMaxTokens: 400,
+  // Max tool loops per voice turn (chat uses 5, voice uses 3 for latency)
+  maxToolRounds: 3,
   temperature: 0.7,
-  // Max conversation history turns to include
   maxHistoryTurns: 20,
-  // Max memories to fetch per turn
   maxMemories: 5,
 } as const;
+
+/** Per-tool timeout in ms. Tools not listed default to DEFAULT_TOOL_TIMEOUT. */
+export const TOOL_TIMEOUTS: Record<string, number> = {
+  web_search: 8_000,
+  web_fetch: 10_000,
+  memory_search: 5_000,
+  generate_image: 15_000,
+  understand_image: 10_000,
+  read_pdf: 10_000,
+  schedule_task: 5_000,
+  list_schedules: 5_000,
+  cancel_schedule: 5_000,
+  send_message: 8_000,
+  browser_navigate: 12_000,
+  browser_screenshot: 8_000,
+  browser_act: 8_000,
+  execute_code: 15_000,
+  send_email: 8_000,
+  get_weather: 8_000,
+};
+export const DEFAULT_TOOL_TIMEOUT = 10_000;
 
 // ── Webhook Secret ──
 // Set via ELEVENLABS_WEBHOOK_SECRET env var

@@ -351,6 +351,17 @@ Unngå lister, markdown, spesialtegn, eller formatering — alt du sier blir les
 Snakk norsk med mindre brukeren snakker engelsk.`);
 
   // ═══════════════════════════════════════════
+  // TOOL GUIDANCE
+  // ═══════════════════════════════════════════
+
+  sections.push(`## Verktøy
+Du har tilgang til verktøy. Bruk dem når brukeren trenger faktisk informasjon (vær, søk, meldinger, planlegging).
+- Si alltid noe naturlig FØR du bruker et verktøy ("La meg sjekke det...", "Et øyeblikk...")
+- Hold svaret etter verktøybruk kort og naturlig — det leses høyt
+- Ikke bruk verktøy for hilsener, følelsesmessig støtte, eller samtale
+- Foretrekk raske verktøy (søk, vær, minne) over trege (nettleser, kode)`);
+
+  // ═══════════════════════════════════════════
   // CONTEXT INJECTION (both layers contribute)
   // ═══════════════════════════════════════════
 
