@@ -22,8 +22,8 @@ export const LLM_PROXY_CONFIG = {
   model: 'claude-sonnet-4-20250514',
   // Tool-calling rounds need room for preamble + tool blocks (512 = ~350 text + tool JSON)
   maxTokens: 512,
-  // Final spoken response — keep short for voice (250 tokens ~ 20-25s speech)
-  finalRoundMaxTokens: 250,
+  // Final spoken response — prompt regulates length, this is a safety net (400 tokens ≈ 30-40s speech)
+  finalRoundMaxTokens: 400,
   // Max tool loops per voice turn (chat uses 5, voice uses 3 for latency)
   maxToolRounds: 3,
   temperature: 0.7,

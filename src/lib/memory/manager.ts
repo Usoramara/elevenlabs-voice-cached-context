@@ -26,7 +26,13 @@ export interface MemoryResult {
  */
 export async function saveMemoryWithEmbedding(input: MemoryInput): Promise<string> {
   const db = getDb();
-  const embedding = await embed(input.content);
+  let embedding: number[];
+  try {
+    embedding = await embed(input.content);
+  } catch (e) {
+    console.warn('[memory] Embedding failed, saving without vector:', e);
+    embedding = new Array(384).fill(0);
+  }
 
   const [row] = await db.insert(memories).values({
     userId: input.userId,

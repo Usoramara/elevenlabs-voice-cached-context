@@ -1,6 +1,8 @@
-export const metadata = {
-  title: 'ElevenLabs Voice Pipeline',
-  description: 'Dual-layer cached LLM proxy for ElevenLabs Conversational AI',
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Wybe',
+  description: 'Alive voice interface',
 };
 
 export default function RootLayout({
@@ -10,7 +12,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="no">
-      <body>{children}</body>
+      <body style={{ margin: 0, background: '#0a0a0a' }}>{children}</body>
     </html>
   );
 }

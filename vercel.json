@@ -8,6 +8,12 @@
     },
     "src/app/api/voice/session/route.ts": {
       "maxDuration": 30
+    },
+    "src/app/api/voice/openclaw/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/voice/signed-url/route.ts": {
+      "maxDuration": 10
     }
   }
 }

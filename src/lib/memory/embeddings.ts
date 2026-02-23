@@ -1,5 +1,3 @@
-import { pipeline } from '@huggingface/transformers';
-
 const MODEL = 'Xenova/all-MiniLM-L6-v2'; // 384 dimensions, runs locally
 export const EMBEDDING_DIMENSIONS = 384;
 
@@ -8,6 +6,7 @@ let extractor: any = null;
 
 async function getExtractor() {
   if (!extractor) {
+    const { pipeline } = await import('@huggingface/transformers');
     extractor = await pipeline('feature-extraction', MODEL, {
       dtype: 'fp32',
     });
