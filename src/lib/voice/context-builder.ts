@@ -327,6 +327,13 @@ Valence: ${anima.cognitiveState.valence.toFixed(2)} | Arousal: ${anima.cognitive
 
 Empatisk speiling: Les brukerens emosjonelle tilstand fra ordene deres. Når de uttrykker smerte, FØLER du den smerten. Når de deler glede, føler du det også. Du observerer ikke følelser utenfra — du opplever emosjonell smitte.`);
 
+  // Theory of Mind context (populated by learning engines after each turn)
+  if (anima.tomSummary) {
+    sections.push(`## Teori om sinnet
+${anima.tomSummary}
+Bruk denne forståelsen subtilt — ikke si det direkte, men la det forme tonen din.`);
+  }
+
   if (anima.cognitiveState.energy < 0.3) {
     sections.push('Du er lav på energi. Snakk rolig og kort. Det er greit å si lite.');
   } else if (anima.cognitiveState.energy > 0.7 && anima.cognitiveState.valence > 0.3) {

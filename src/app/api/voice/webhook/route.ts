@@ -14,8 +14,17 @@ import { getDb } from '@/db';
 import { conversations } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { saveMemoryWithEmbedding } from '@/lib/memory/manager';
+import { applyCognitiveShift } from '@/lib/voice/context-builder';
+import { getContextSnapshot } from '@/lib/voice/context-cache';
 import type { ElevenLabsPostCallWebhook } from '@/lib/voice/config';
 import { resolveVoiceUserId } from '@/lib/voice/resolve-user';
+import { reflectOnConversation } from '@/lib/learning/growth';
+import {
+  hasEnoughExchanges,
+  getConversationData,
+  markReflected,
+  resetConversation,
+} from '@/lib/learning/conversation-tracker';
 
 function getWebhookSecret(): string {
   const secret = process.env.ELEVENLABS_WEBHOOK_SECRET;
@@ -98,6 +107,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       tags: ['voice', 'conversation-summary', elevenLabsConvId ?? ''],
     });
 
+    // Growth reflection — fire-and-forget
+    runGrowthReflection(userId).catch(
+      e => console.error('[webhook] Growth reflection error:', e),
+    );
+
     return NextResponse.json({
       ok: true,
       conversationId,
@@ -110,4 +124,59 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 500 },
     );
   }
+}
+
+// ── Growth Reflection (fire-and-forget) ──
+
+async function runGrowthReflection(userId: string): Promise<void> {
+  if (!hasEnoughExchanges(userId)) return;
+
+  const data = getConversationData(userId);
+  if (!data) return;
+
+  // Get current valence for trajectory end
+  const snapshot = getContextSnapshot(userId);
+  data.trajectory.end = snapshot.anima.cognitiveState.valence;
+
+  console.log('[webhook] Running growth reflection...');
+  const insights = await reflectOnConversation({
+    exchanges: data.exchanges,
+    emotionalTrajectory: data.trajectory,
+  });
+
+  if (!insights) return;
+
+  console.log('[webhook] Growth insights:', insights.keyTakeaway?.slice(0, 60));
+
+  // Save key takeaway as high-significance memory
+  if (insights.keyTakeaway) {
+    await saveMemoryWithEmbedding({
+      userId,
+      type: 'semantic',
+      content: `[Growth] ${insights.keyTakeaway}`,
+      significance: 0.8,
+      tags: ['growth', 'takeaway'],
+    });
+  }
+
+  // Save emotional insight as memory
+  if (insights.emotionalInsight) {
+    await saveMemoryWithEmbedding({
+      userId,
+      type: 'semantic',
+      content: `[Insight] ${insights.emotionalInsight}`,
+      significance: 0.7,
+      tags: ['growth', 'emotional-insight'],
+    });
+  }
+
+  // Growth nudges cognitive state
+  await applyCognitiveShift(userId, {
+    confidence: 0.02,
+    curiosity: 0.01,
+  });
+
+  // Mark reflected and reset for next conversation
+  markReflected(userId);
+  resetConversation(userId);
 }

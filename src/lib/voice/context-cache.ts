@@ -34,6 +34,7 @@ export interface AnimaCache {
   cognitiveState: SelfState;
   memories: string[];
   recentHistory: Array<{ role: string; content: string }>;
+  tomSummary?: string; // Theory of Mind: "They're feeling X, wanting Y"
   lastSynced: number;
 }
 

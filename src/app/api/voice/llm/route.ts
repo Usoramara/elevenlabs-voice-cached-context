@@ -44,9 +44,14 @@ import {
   parseEmotionShift,
   appendHistoryToCache,
 } from '@/lib/voice/context-builder';
+import { getContextSnapshot, updateAnimaCache } from '@/lib/voice/context-cache';
 import { LLM_PROXY_CONFIG } from '@/lib/voice/config';
 import type { OpenAIChatRequest } from '@/lib/voice/config';
 import { resolveVoiceUserId } from '@/lib/voice/resolve-user';
+import { detectEmotion } from '@/lib/learning/detect-emotion';
+import { computeEmpathicCoupling } from '@/lib/learning/empathic-coupling';
+import { inferToM, getToMSummary, checkPrediction } from '@/lib/learning/theory-of-mind';
+import { trackExchange, trackEmotionalPeak } from '@/lib/learning/conversation-tracker';
 
 // ── Auth ──
 function getVoiceSecret(): string {
@@ -273,12 +278,16 @@ async function processAfterResponse(
   // 2. Write assistant message to DB (async)
   await writeMessage(conversationId, 'assistant', cleanText, shift);
 
-  // 3. Apply cognitive shift (cache instant, DB async)
+  // 3. Track exchange for growth engine
+  const snapshot = getContextSnapshot(userId);
+  trackExchange(userId, 'assistant', cleanText, snapshot.anima.cognitiveState.valence);
+
+  // 4. Apply cognitive shift from SHIFT line (cache instant, DB async)
   if (shift) {
     await applyCognitiveShift(userId, shift);
   }
 
-  // 4. Store significant interactions as memories (DB async)
+  // 5. Store significant interactions as memories (DB async)
   const significance = computeSignificance(cleanText, shift);
   if (significance > 0.4) {
     try {
@@ -291,6 +300,98 @@ async function processAfterResponse(
       });
     } catch (e) {
       console.error('[voice] Memory save error:', e);
+    }
+  }
+
+  // 6. Fire-and-forget: learning engines (zero latency on hot path)
+  runLearningEngines(userId, cleanText, shift).catch(
+    e => console.error('[learning] Engine error:', e),
+  );
+}
+
+// ── Learning engines: fire-and-forget post-response ──
+
+async function runLearningEngines(
+  userId: string,
+  assistantText: string,
+  shift: Partial<Record<string, number>> | null,
+): Promise<void> {
+  // Get the last user message from cache
+  const snapshot = getContextSnapshot(userId);
+  const history = snapshot.anima.recentHistory;
+  const lastUserMsg = [...history].reverse().find(m => m.role === 'user');
+  if (!lastUserMsg) return;
+
+  const userText = lastUserMsg.content;
+
+  // Track user exchange for growth engine
+  trackExchange(userId, 'user', userText, snapshot.anima.cognitiveState.valence);
+
+  // Run emotion detection and ToM concurrently
+  const [emotionResult, tomResult] = await Promise.all([
+    detectEmotion(userText, assistantText.slice(0, 100)),
+    inferToM({
+      userId,
+      content: userText,
+      currentEmotions: undefined, // Will be filled after emotion detection on next turn
+    }),
+  ]);
+
+  console.log('[learning] Emotion detected:', {
+    emotions: emotionResult.emotions,
+    valence: emotionResult.valence,
+    confidence: emotionResult.confidence,
+  });
+
+  // Track emotional peaks for growth engine
+  for (const emotion of emotionResult.emotions) {
+    trackEmotionalPeak(userId, emotion);
+  }
+
+  // Compute empathic coupling (pure math, ~0ms)
+  const coupling = computeEmpathicCoupling(emotionResult);
+
+  if (coupling.couplingIntensity > 0) {
+    console.log('[learning] Empathic coupling:', {
+      intensity: coupling.couplingIntensity.toFixed(2),
+      hasGrief: coupling.hasGrief,
+      nudges: coupling.nudges,
+    });
+  }
+
+  // Combine empathic nudges with any ToM confidence nudge
+  const combinedNudges = { ...coupling.nudges };
+  if (tomResult && checkPrediction(userId, userText)) {
+    combinedNudges.confidence = (combinedNudges.confidence ?? 0) + 0.05;
+    console.log('[learning] ToM prediction validated — confidence +0.05');
+  }
+
+  // Apply combined empathic + ToM nudges to cognitive state
+  const hasNudges = Object.values(combinedNudges).some(v => v !== 0 && v !== undefined);
+  if (hasNudges) {
+    await applyCognitiveShift(userId, combinedNudges);
+  }
+
+  // Update ToM summary in cache for next turn's prompt
+  const tomSummary = getToMSummary(userId);
+  if (tomSummary) {
+    updateAnimaCache(userId, { tomSummary });
+    console.log('[learning] ToM summary:', tomSummary.slice(0, 80));
+  }
+
+  // Store ToM-enriched memory if interaction was significant
+  if (tomResult && emotionResult.confidence > 0.5) {
+    const enrichedContent = `[stemme] ${userText} — Følte: ${emotionResult.emotions.join(', ')}. ${tomResult.thinking}`;
+    try {
+      await saveMemoryWithEmbedding({
+        userId,
+        type: 'episodic',
+        content: enrichedContent,
+        significance: 0.5 + emotionResult.confidence * 0.3,
+        tags: ['voice', 'learning', 'tom-enriched'],
+      });
+    } catch (e) {
+      console.error('[learning] Enriched memory save error:', e);
     }
   }
 }
