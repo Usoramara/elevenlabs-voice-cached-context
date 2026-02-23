@@ -5,7 +5,8 @@
  * Triggers async cache warm for both ANIMA and OpenClaw layers
  * so the first voice turn reads from a hot cache.
  *
- * Returns ElevenLabs SDK configuration with current cognitive state.
+ * Returns cognitive state for the orb visualization.
+ * ElevenLabs uses its configured first_message ("Hei.") directly.
  */
 
 import { NextResponse } from 'next/server';
@@ -21,12 +22,11 @@ export async function POST(): Promise<Response> {
   const userId = await resolveVoiceUserId();
 
   // ── Warm both layers (ANIMA + OpenClaw) in parallel ──
-  // This runs async but we await it here since this is session init,
-  // not the hot voice-turn path. ~50-100ms is fine at session start.
   await warmCache(userId);
 
   // Read from the now-warm cache
   const snapshot = getContextSnapshot(userId);
+  const cog = snapshot.anima.cognitiveState;
 
   // Create voice conversation in DB
   const db = getDb();
@@ -39,19 +39,11 @@ export async function POST(): Promise<Response> {
     ok: true,
     agentId: ELEVENLABS_AGENT_ID,
     conversationId: conv.id,
-    // Dynamic variables for ElevenLabs agent
-    dynamicVariables: {
-      user_id: userId,
-      conversation_id: conv.id,
-      // ANIMA layer state
-      valence: snapshot.anima.cognitiveState.valence.toFixed(2),
-      arousal: snapshot.anima.cognitiveState.arousal.toFixed(2),
-      energy: snapshot.anima.cognitiveState.energy.toFixed(2),
-      // OpenClaw layer identity
-      agent_name: snapshot.openclaw.identity.name,
-      agent_vibe: snapshot.openclaw.identity.vibe,
+    cognitiveState: {
+      valence: cog.valence,
+      arousal: cog.arousal,
+      energy: cog.energy,
     },
-    // Cache health
     cache: {
       animaSynced: snapshot.anima.lastSynced > 0,
       openclawSynced: snapshot.openclaw.lastSynced > 0,

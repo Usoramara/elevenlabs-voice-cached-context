@@ -41,7 +41,7 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
     "conversation_config": {
       "agent": {
         "language": "no",
-        "first_message": "\n\n",
+        "first_message": "Hei.",
         "prompt": {
           "llm": "custom-llm",
           "custom_llm": {
@@ -66,6 +66,13 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
     "platform_settings": {
       "auth": {
         "enable_auth": true
+      },
+      "overrides": {
+        "conversation_config_override": {
+          "agent": {
+            "first_message": true
+          }
+        }
       }
     }
   }')
@@ -107,6 +114,7 @@ if [[ "$V_CODE" -ge 200 && "$V_CODE" -lt 300 ]]; then
   echo "Silence end:  $(echo "$V_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['conversation_config']['turn']['silence_end_call_timeout'])" 2>/dev/null || echo "?")"
   echo "Eagerness:    $(echo "$V_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['conversation_config']['turn']['turn_eagerness'])" 2>/dev/null || echo "?")"
   echo "Max duration: $(echo "$V_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['conversation_config']['conversation']['max_duration_seconds'])" 2>/dev/null || echo "?")"
+  echo "First msg:    $(echo "$V_BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['conversation_config']['agent']['first_message'])" 2>/dev/null || echo "?")"
 else
   echo "Verification GET failed ($V_CODE)"
   echo "$V_BODY"

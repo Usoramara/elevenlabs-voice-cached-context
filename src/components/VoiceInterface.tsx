@@ -35,7 +35,7 @@ export default function VoiceInterface() {
 
   const conversation = useConversation({
     onMessage: ({ message, role }) => {
-      if (!message.trim()) return; // Skip empty messages (e.g. first_message: "\n\n")
+      if (!message.trim()) return;
       setTranscript((prev) => [...prev, { role, message }]);
     },
     onConnect: () => {
@@ -87,6 +87,9 @@ export default function VoiceInterface() {
       console.error('[voice] Error:', message);
       setError(message);
     },
+    onDebug: (props) => {
+      console.log('[voice] Debug:', props);
+    },
   });
 
   // Cleanup reconnect timer on unmount
@@ -136,10 +139,7 @@ export default function VoiceInterface() {
       const sessionRes = await fetch('/api/voice/session', { method: 'POST' });
       const session = await sessionRes.json();
 
-      await conversation.startSession({
-        signedUrl,
-        dynamicVariables: session.dynamicVariables,
-      });
+      await conversation.startSession({ signedUrl });
     } catch (err) {
       console.error('[voice] Reconnect failed:', err);
       if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
@@ -163,11 +163,12 @@ export default function VoiceInterface() {
       const sessionRes = await fetch('/api/voice/session', { method: 'POST' });
       const session = await sessionRes.json();
 
-      if (session.dynamicVariables) {
+      // Read cognitive state for orb visualization
+      if (session.cognitiveState) {
         setCogState({
-          valence: parseFloat(session.dynamicVariables.valence) || DEFAULT_STATE.valence,
-          arousal: parseFloat(session.dynamicVariables.arousal) || DEFAULT_STATE.arousal,
-          energy: parseFloat(session.dynamicVariables.energy) || DEFAULT_STATE.energy,
+          valence: session.cognitiveState.valence ?? DEFAULT_STATE.valence,
+          arousal: session.cognitiveState.arousal ?? DEFAULT_STATE.arousal,
+          energy: session.cognitiveState.energy ?? DEFAULT_STATE.energy,
         });
       }
 
@@ -180,11 +181,8 @@ export default function VoiceInterface() {
         return;
       }
 
-      // Start ElevenLabs session
-      await conversation.startSession({
-        signedUrl,
-        dynamicVariables: session.dynamicVariables,
-      });
+      // Start ElevenLabs session — greeting comes from agent config ("Hei.")
+      await conversation.startSession({ signedUrl });
     } catch (err) {
       console.error('[voice] Start failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to start');
