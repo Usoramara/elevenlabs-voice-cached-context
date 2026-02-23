@@ -34,6 +34,7 @@ export default function VoiceInterface() {
 
   const conversation = useConversation({
     onMessage: ({ message, role }) => {
+      if (!message.trim()) return; // Skip empty messages (e.g. first_message: "\n\n")
       setTranscript((prev) => [...prev, { role, message }]);
     },
     onConnect: () => {
@@ -45,10 +46,13 @@ export default function VoiceInterface() {
       console.log('[voice] Disconnected:', details.reason);
       fetchCognitiveState();
 
-      // Auto-reconnect on non-user disconnects
+      // Auto-reconnect only on error disconnects
+      // reason: "agent" = agent ended call intentionally → don't reconnect
+      // reason: "user" = user clicked end → don't reconnect
+      // reason: "error" = unexpected failure → reconnect
       if (
         !intentionalDisconnect.current &&
-        details.reason !== 'user' &&
+        details.reason === 'error' &&
         reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS
       ) {
         const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 8000);
