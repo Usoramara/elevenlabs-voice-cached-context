@@ -41,7 +41,7 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
     "conversation_config": {
       "agent": {
         "language": "no",
-        "first_message": null,
+        "first_message": "",
         "prompt": {
           "llm": "custom-llm",
           "custom_llm": {
