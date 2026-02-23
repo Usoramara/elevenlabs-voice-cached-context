@@ -252,6 +252,12 @@ function handleStreaming(
           // Execute all tools from this round
           console.log(`[voice] Round ${round}: executing ${toolUseBlocks.length} tool(s): ${toolUseBlocks.map(t => t.name).join(', ')}`);
 
+          // Send SSE keepalive comments during tool execution to prevent
+          // ElevenLabs from interpreting the gap as end-of-response
+          const keepalive = setInterval(() => {
+            controller.enqueue(encoder.encode(':\n\n'));
+          }, 2000);
+
           const toolResults = await Promise.all(
             toolUseBlocks.map(async (block) => {
               let input: Record<string, unknown> = {};
@@ -271,6 +277,8 @@ function handleStreaming(
               return executeTool(toolCall);
             }),
           );
+
+          clearInterval(keepalive);
 
           // Build the assistant message content (text + tool_use blocks)
           const assistantContent: Anthropic.ContentBlockParam[] = [];
