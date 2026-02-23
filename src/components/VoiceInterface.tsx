@@ -31,6 +31,7 @@ export default function VoiceInterface() {
   const intentionalDisconnect = useRef(false);
   const reconnectAttempts = useRef(0);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectedAt = useRef<number | null>(null);
 
   const conversation = useConversation({
     onMessage: ({ message, role }) => {
@@ -38,23 +39,39 @@ export default function VoiceInterface() {
       setTranscript((prev) => [...prev, { role, message }]);
     },
     onConnect: () => {
+      console.log('[voice] Connected');
+      connectedAt.current = Date.now();
       setError(null);
       setIsReconnecting(false);
       reconnectAttempts.current = 0;
     },
     onDisconnect: (details: DisconnectionDetails) => {
-      console.log('[voice] Disconnected:', details.reason);
+      const sessionDuration = connectedAt.current
+        ? Date.now() - connectedAt.current
+        : null;
+      console.log('[voice] Disconnected:', {
+        reason: details.reason,
+        sessionDurationMs: sessionDuration,
+      });
+      connectedAt.current = null;
       fetchCognitiveState();
 
       // Auto-reconnect only on error disconnects
       // reason: "agent" = agent ended call intentionally → don't reconnect
       // reason: "user" = user clicked end → don't reconnect
-      // reason: "error" = unexpected failure → reconnect
+      // reason: "error" = unexpected failure → reconnect (unless instant disconnect)
       if (
         !intentionalDisconnect.current &&
         details.reason === 'error' &&
         reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS
       ) {
+        // If session lasted < 2s, it's likely a config/setup error — reconnecting won't help
+        if (sessionDuration !== null && sessionDuration < 2000) {
+          console.warn('[voice] Instant disconnect detected (session lasted <2s) — skipping reconnect. Likely a config error.');
+          setError('Connection failed immediately — check agent config');
+          return;
+        }
+
         const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 8000);
         console.log(`[voice] Auto-reconnect attempt ${reconnectAttempts.current + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
         setIsReconnecting(true);
@@ -62,6 +79,9 @@ export default function VoiceInterface() {
           handleReconnect();
         }, delay);
       }
+    },
+    onStatusChange: ({ status }) => {
+      console.log('[voice] Status:', status);
     },
     onError: (message) => {
       console.error('[voice] Error:', message);
