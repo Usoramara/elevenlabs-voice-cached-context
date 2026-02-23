@@ -13,12 +13,12 @@ import { getDb } from '@/db';
 import { conversations } from '@/db/schema';
 import { warmCache } from '@/lib/voice/context-builder';
 import { getContextSnapshot } from '@/lib/voice/context-cache';
+import { resolveVoiceUserId } from '@/lib/voice/resolve-user';
 
-const VOICE_USER_ID = process.env.VOICE_DEFAULT_USER_ID ?? 'voice-user';
 const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 
 export async function POST(): Promise<Response> {
-  const userId = VOICE_USER_ID;
+  const userId = await resolveVoiceUserId();
 
   // ── Warm both layers (ANIMA + OpenClaw) in parallel ──
   // This runs async but we await it here since this is session init,

@@ -11,11 +11,27 @@
 import { NextResponse } from 'next/server';
 import { syncOpenClawToDb } from '@/lib/voice/context-builder';
 import { getContextSnapshot } from '@/lib/voice/context-cache';
+import { resolveVoiceUserId } from '@/lib/voice/resolve-user';
 
-const VOICE_USER_ID = process.env.VOICE_DEFAULT_USER_ID ?? 'voice-user';
+function getVoiceSecret(): string {
+  const secret = process.env.ELEVENLABS_LLM_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('ELEVENLABS_LLM_SECRET is required in production');
+  }
+  return 'dev-voice-secret';
+}
 
 export async function POST(request: Request): Promise<Response> {
-  const userId = VOICE_USER_ID;
+  // Authenticate — same bearer token as LLM proxy
+  const authHeader = request.headers.get('authorization');
+  const providedSecret = authHeader?.replace('Bearer ', '') ?? '';
+
+  if (providedSecret !== getVoiceSecret() && process.env.NODE_ENV !== 'development') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const userId = await resolveVoiceUserId();
 
   let body: Record<string, unknown>;
   try {
@@ -53,7 +69,7 @@ export async function POST(request: Request): Promise<Response> {
 
 /** GET /api/voice/openclaw — Read current OpenClaw cache state */
 export async function GET(): Promise<Response> {
-  const userId = VOICE_USER_ID;
+  const userId = await resolveVoiceUserId();
   const snapshot = getContextSnapshot(userId);
 
   return NextResponse.json({

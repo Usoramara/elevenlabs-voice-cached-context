@@ -12,17 +12,24 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db';
 import { conversations } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { saveMemoryWithEmbedding } from '@/lib/memory/manager';
 import type { ElevenLabsPostCallWebhook } from '@/lib/voice/config';
+import { resolveVoiceUserId } from '@/lib/voice/resolve-user';
 
-const WEBHOOK_SECRET = process.env.ELEVENLABS_WEBHOOK_SECRET ?? 'dev-webhook-secret';
-const VOICE_USER_ID = process.env.VOICE_DEFAULT_USER_ID ?? 'voice-user';
+function getWebhookSecret(): string {
+  const secret = process.env.ELEVENLABS_WEBHOOK_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('ELEVENLABS_WEBHOOK_SECRET is required in production');
+  }
+  return 'dev-webhook-secret';
+}
 
 export async function POST(request: Request): Promise<NextResponse> {
   // Verify webhook signature
   const signature = request.headers.get('x-elevenlabs-signature') ?? '';
-  if (signature !== WEBHOOK_SECRET && process.env.NODE_ENV !== 'development') {
+  if (signature !== getWebhookSecret() && process.env.NODE_ENV !== 'development') {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 
@@ -33,7 +40,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const userId = VOICE_USER_ID;
+  const userId = await resolveVoiceUserId();
   const { transcript, analysis, conversation_id: elevenLabsConvId } = payload;
 
   if (!transcript || transcript.length === 0) {
@@ -53,7 +60,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           eq(conversations.title, '🎙️ Voice'),
         ),
       )
-      .orderBy(conversations.updatedAt)
+      .orderBy(desc(conversations.updatedAt))
       .limit(1);
 
     if (!voiceConv) {

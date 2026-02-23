@@ -35,7 +35,7 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '@/db';
 import { messages, conversations } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { saveMemoryWithEmbedding } from '@/lib/memory/manager';
 import {
   buildVoiceSystemPrompt,
@@ -46,10 +46,17 @@ import {
 } from '@/lib/voice/context-builder';
 import { LLM_PROXY_CONFIG } from '@/lib/voice/config';
 import type { OpenAIChatRequest } from '@/lib/voice/config';
+import { resolveVoiceUserId } from '@/lib/voice/resolve-user';
 
 // ── Auth ──
-const VOICE_SECRET = process.env.ELEVENLABS_LLM_SECRET ?? 'dev-voice-secret';
-const VOICE_USER_ID = process.env.VOICE_DEFAULT_USER_ID ?? 'voice-user';
+function getVoiceSecret(): string {
+  const secret = process.env.ELEVENLABS_LLM_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('ELEVENLABS_LLM_SECRET is required in production');
+  }
+  return 'dev-voice-secret';
+}
 
 // ── Claude client ──
 const anthropic = new Anthropic({
@@ -64,7 +71,7 @@ export async function POST(request: Request): Promise<Response> {
   const authHeader = request.headers.get('authorization');
   const providedSecret = authHeader?.replace('Bearer ', '') ?? '';
 
-  if (providedSecret !== VOICE_SECRET && process.env.NODE_ENV !== 'development') {
+  if (providedSecret !== getVoiceSecret() && process.env.NODE_ENV !== 'development') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -76,7 +83,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { messages: chatMessages, stream = true } = body;
-  const userId = VOICE_USER_ID;
+  const userId = await resolveVoiceUserId();
 
   // ── Warm cache on first call (async, doesn't block) ──
   if (!warmedUsers.has(userId)) {
@@ -113,10 +120,10 @@ export async function POST(request: Request): Promise<Response> {
     ? `${elevenLabsSystem}\n\n${animaSystemPrompt}`
     : animaSystemPrompt;
 
-  // Convert OpenAI messages to Anthropic format
+  // Convert OpenAI messages to Anthropic format (Claude rejects whitespace-only content)
   const anthropicMessages: Anthropic.MessageParam[] = chatHistory
     .filter(m => m.role === 'user' || m.role === 'assistant')
-    .filter(m => m.content)
+    .filter(m => typeof m.content === 'string' && m.content.trim())
     .map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content!,
@@ -302,7 +309,7 @@ async function getOrCreateVoiceConversation(userId: string): Promise<string> {
         eq(conversations.title, '🎙️ Voice'),
       ),
     )
-    .orderBy(conversations.updatedAt)
+    .orderBy(desc(conversations.updatedAt))
     .limit(1);
 
   if (existing) {
